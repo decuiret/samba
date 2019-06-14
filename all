@@ -1,0 +1,178 @@
+Synthèse Manip Centos : 
+ 
+	Machine CentOS : 
+		• CentOS Redhat 64 iso minimal 
+		• Carte 1 : Bridged  
+		• Carte 2 : Internal  
+	Machine Windows 7 : 
+		• Carte : Internal  
+ 
+CentOS :  
+	Installation
+		Lancer la machine CentOS, mettre la langue en Anglais, changer le clavier, supprimer Anglais et ajouter Dutch flemish  
+		Cliquer sur la destination de l’installation-> done  
+		Activer la carte en accès par pont (enp0s3) pour avoir accès à internet  
+		Après le chargement, se connecter avec son login et mdp 
+		
+Carte réseau
+	vi /etc/sysconfig/network-scripts/ifcfg-enp0s8 
+		Bootproto=static 
+		IPADDR= « adresse du serveur »
+		NETMASK= « masque de l’adresse »
+		Onboot=yes 
+	:wq 
+Service network restart 
+ 
+DHCP 
+	Yum install dhcp 
+	Cp /usr/share/doc/dhcp-4.2.5/dhcpd.conf.example       /etc/dhcp/dhcpd.conf  
+	Y  
+	Vi /etc/dhcp/dhcpd.conf 
+	Faire 3dd au dessus du 1er subnet
+	Faire 200dd en dessous du 2eme subnet (})
+
+		option domain-name "avengers.lan" ;
+		option domain-name-servers 8.8.8.8 ;
+		ddns-update-style none ;
+		authoritative ;
+		default-lease-time 600  3600 ;
+		subnet 192.168.0.0 netmask 255.255.255.0{
+		range 192.168.0.1 192.168.0.252 ;
+		option routers 192.168.0.254 ;
+		}
+	:wq  
+Systemctl restart dhcpd 
+Systemctl enable dhcpd 
+
+Test Windows 7 
+	Ipconfig dans le cmd
+	
+CentOS :  
+NAT 
+	Systemctl stop firewalld 
+	Systemctl disable firewalld  
+	Vi /etc/selinux/config  
+		SELINUX=enforcing disabled  
+	:wq 
+	
+	Yum install iptables iptables-services 
+	Systemctl start iptables 
+	Systemctl enable iptables  
+	Iptables -t filter –L  
+	Iptables --flush  
+	Iptables -t filter –L  
+	Services iptables save  
+	Iptables –t nat –A POSTROUTING –o Enp0s3 –j MASQUERADE  
+	Vérifier avec iptables –t nat –L  
+	Service iptables save 
+	Find / -name 50-* (Pour trouver la localisation du fichier) 
+	Vi /usr/lib/sysctl.d/50-default.conf  
+		net.ipv4.ip_forward = 1 (Rajouter n’importe où ) 
+	:wq  
+	Reboot  
+	
+Test Windows 7 
+	ping 8.8.8.8 dans cmd 
+ 	 
+CentOS 
+SAMBA 
+	Yum install samba
+	Systemctl start smb.service
+	Systemctl start nmb.service
+	Systemctl enable smb.service
+	Systemctl enable nmb.service
+	Useradd nomd'utilisateur –g users –s /bin/bash –d /home/nomd'utilisateur
+Passwd nomd'utilisateur
+Smbpasswd –a nomd'utilisateur
+Groupadd machines
+Useradd MKVI$ -g machines –s /bin/false –d /dev/null
+Smbpasswd –a –m MKVI$
+Smbpasswd –a root
+Cp /etc/samba/smb.conf.example /etc/samba/smb.conf
+
+Vi /etc/samba/smb.conf
+			[global]
+			Workgroup = SHIELD
+			Admin users = root à ajouter en dessous de workgroup
+			Encrypt passwords = true  à ajouter en dessous de Admin users
+			Domain master = yes
+			Domain logons = yes
+			Local master = yes
+			preferred master = yes
+			Wins support = no
+			Dns proxy = no
+	:wq
+	Systemctl restart smb.service
+	Systemctl restart nmb.service
+	Hostnamectl set-hostname Furry
+
+Windows 7
+	Regedit
+	HKEY_LOCAL_MACHINE
+			SYSTEM
+				CurrentControlSet
+					Services
+						Lanman-Workstation
+							Parameters
+							Ajouter un Dword 32 bits « DomainCompatibilityMode » à 1
+							Ajouter un Dword 32 bits « DNSNameResolutionRequired » à 0
+	Rentrer dans le domain
+
+CentOS
+Vi /etc/samba/smb.conf
+	[global]
+		Logon path = \\%N\profiles \%U
+		[profiles]
+		Path = /profiles
+		Browseable = no 
+		Read only = no
+		Create mask = 0600
+		Directory mask = 0700
+	[profiles.V2]
+		Copy = Profiles
+	:wq
+	Systemctl restart smb.service
+	Systemctl restart nmb.service
+	Mkdir /Profiles
+	Chmod 755 /Profiles
+	Mkdir /Profiles/nomd'utilisateur.V2
+	Chmod 700 /Profiles/nomd'utilisateur.V2
+	Chown nomd'utilisateur:users /Profiles/nomd'utilisateur.V2
+	Vi /etc/samba/smb.conf
+		[global]
+			Logon home = \\%N \%U –> à ajouter en dessous de logon path
+			Logon script = logon.bat
+			[homes]
+			Browseable = no
+			writable = yes
+			Create mask = 0600
+			Directory mask = 0700
+			Valid users = %S
+			[netlogon]
+			Path = /netlogon
+			writable = no
+			Create mask = 0644
+			Directory mask = 0755
+			[public]
+			Path = /home/public
+			Public = yes
+			Writeable = yes
+			Create mask = 0666
+			Directory mask = 0777
+	:wq
+	
+	Mkdir /home/public
+	Chmod 777 /home/public
+	Mkdir /netlogon
+	Chmod 755 /netlogon
+	Systemctl restart smb.service
+	Systemctl restart nmb.service
+	
+Windows 7
+	Créer un .bat contenant « net use w: \\(Nom du serveur)\public »
+ATTENTION A L’ESPACE ENTRE LA LETTRE DE LECTEUR ET LE CHEMIN RESEAU
+
+CentOS
+	Mv /home/nomd'utilisateur/logon.bat /netlogon/logon.bat 
+	Chmod 755 /netlogon/logon.bat
+	Chown root:root /netlogon/logon.bat
